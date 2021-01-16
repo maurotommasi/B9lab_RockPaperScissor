@@ -210,7 +210,10 @@ contract RockPaperScissor is Stoppable{
             balances[game.player1] = balances[game.player1].sub(game.bet).add(penality);
         }
 
+        games[_gameID].gameStatus = GameStatus.Stopped;
+
         emit AwardsLog(msg.sender, game.bet, penality);
+        emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
 
         return true;
     }

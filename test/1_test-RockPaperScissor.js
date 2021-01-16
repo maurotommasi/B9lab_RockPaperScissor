@@ -45,7 +45,7 @@ contract("RockPaperScissor", accounts => {
             assert.strictEqual(balance_p2.toString(10),"0");
         })
     })
-    
+
     describe("Unit Testing", () => {
         it("Player Can deposit an amount", async function() {
             const txObj = await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT});
@@ -243,6 +243,9 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[0].args.who, player1, "player1 Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), "0", "Penality Dismatch");
+        txObj.logs[1].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
     });
     
     it("GameAward -> P2 WIN with no penality. Example: P1: ROCK, P2 = PAPER", async function() {
@@ -279,6 +282,9 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[0].args.who, player2, "player1 Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), "0", "Penality Dismatch");
+        txObj.logs[1].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
     });
 
     it("GameAward -> P2 WIN with partial penality. Example: P1: ROCK, P2 = PAPER", async function() {
@@ -319,6 +325,9 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), penality.toString(10), "Penality Dismatch");
         assert.strictEqual((newBalance - oldBalance).toString(10), (BET - penality).toString(10));
+        txObj.logs[1].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
     });
 
     it("GameAward -> P2 WIN with full penality. Example: P1: ROCK, P2 = PAPER", async function() {
@@ -359,6 +368,9 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), penality.toString(10), "Penality Dismatch");
         assert.strictEqual((newBalance - oldBalance).toString(10), (BET - penality).toString(10));
+        txObj.logs[1].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
     });
 
     it("Game Stop", async function() {
