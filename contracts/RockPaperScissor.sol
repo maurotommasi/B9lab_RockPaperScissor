@@ -36,6 +36,7 @@ contract RockPaperScissor is Stoppable{
 
     mapping(uint => GameMetaData) private games;
     mapping(address => uint) public balances;
+    mapping(address => uint) public balances_locked;
     mapping(bytes32 => bool) public secrets;
 
     event GameMetaDataLog(uint indexed gameID, uint bet, address indexed player1, address indexed player2, uint expirationTime, uint freeBetTime);
@@ -108,7 +109,7 @@ contract RockPaperScissor is Stoppable{
 
         games[newGameID] = game;
         secrets[_secretHand] = true;
-
+        balances_locked[msg.sender] = balances_locked[msg.sender].add(bet);
         emit GameChangeStatusLog(newGameID, GameStatus.Created);
         emit GameMetaDataLog(newGameID, game.bet, game.player1, game.player2, game.expirationTime, game.freeBetTime);
         emit PlayerHashMoveLog(game.player1, game.movePlayer1.hashMove, newGameID);
@@ -133,7 +134,8 @@ contract RockPaperScissor is Stoppable{
         games[_gameID].gameStatus = GameStatus.Bet;
         games[_gameID].movePlayer2 = movePlayer2;
         secrets[_secretHand] = true;
-        
+        balances_locked[msg.sender] = balances_locked[msg.sender].add(bet);
+
         emit GameChangeStatusLog(_gameID, GameStatus.Bet);
         emit PlayerHashMoveLog(msg.sender, movePlayer2.hashMove, _gameID);
 
@@ -216,7 +218,8 @@ contract RockPaperScissor is Stoppable{
         }
 
         games[_gameID].gameStatus = GameStatus.Stopped;
-
+        balances_locked[game.player1] = balances_locked[game.player1].sub(game.bet);
+        balances_locked[game.player2] = balances_locked[game.player2].sub(game.bet);
         emit AwardsLog(msg.sender, game.bet, penality);
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
 
@@ -236,8 +239,9 @@ contract RockPaperScissor is Stoppable{
 
     function withdrawBalance() public returns(bool success){
         uint balance = balances[msg.sender];
+        uint balance_locked = balances_locked[msg.sender];
 
-        require(balance != 0, "Remittance.withdrawBalance#001 : Balance can't be equal to 0");
+        require(balance != uint(0) && balance_locked == uint(0), "Remittance.withdrawBalance#001 : Balance can't be equal to 0");
 
         balances[msg.sender] = uint(0);
 
@@ -252,6 +256,9 @@ contract RockPaperScissor is Stoppable{
         require(game.gameStatus != GameStatus.Closed || game.gameStatus != GameStatus.Stopped, "Game already closed or stopped");
         require(game.player1 == msg.sender, "Sender is not a creator");
         games[_gameID].gameStatus = GameStatus.Closed;
+        balances_locked[game.player1] = balances_locked[game.player1].sub(game.bet);
+        balances_locked[game.player2] = balances_locked[game.player2].sub(game.bet);
+        emit AwardsLog(msg.sender, game.bet, penality);
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
     }
 
