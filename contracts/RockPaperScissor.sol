@@ -36,6 +36,7 @@ contract RockPaperScissor is Stoppable{
 
     mapping(uint => GameMetaData) private games;
     mapping(address => uint) public balances;
+    mapping(bytes32 => bool) public secrets;
 
     event GameMetaDataLog(uint indexed gameID, uint bet, address indexed player1, address indexed player2, uint expirationTime, uint freeBetTime);
     event GameChangeStatusLog (uint indexed gameID, GameStatus gameStatus);
@@ -81,6 +82,7 @@ contract RockPaperScissor is Stoppable{
         require(_opponent != address(0x0), "RockPaperScissor.createGame, Opponent can't be null");
         require(balances[msg.sender] >= _bet, "RockPaperScissor.createGame, Not enough wei to do this bet");
         require(_secretHand != bytes32(0), "RockPaperScissor.createGame, Secret Hand not valid");
+        require(!secrets[_secretHand], "Secret Hand not allowed");
 
         uint newGameID = gameID.add(uint(1));
         gameID = newGameID;
@@ -105,6 +107,7 @@ contract RockPaperScissor is Stoppable{
         });
 
         games[newGameID] = game;
+        secrets[_secretHand] = true;
 
         emit GameChangeStatusLog(newGameID, GameStatus.Created);
         emit GameMetaDataLog(newGameID, game.bet, game.player1, game.player2, game.expirationTime, game.freeBetTime);
@@ -120,6 +123,7 @@ contract RockPaperScissor is Stoppable{
         require(balances[msg.sender] >= game.bet, "RockPaperScissor.challangeAccepted, Not enough wei on sender's balance to bet this game");
         require(game.gameStatus == GameStatus.Created, "RockPaperScissor.challangeAccepted, This game is not created yet or challange already accepted");
         require(game.player2 == msg.sender, "RockPaperScissor.challangeAccepted, You must be a declared opponent");
+        require(!secrets[_secretHand], "Secret Hand not allowed");
 
         Move memory movePlayer2 = Move({
             hashMove: _secretHand,
@@ -128,7 +132,8 @@ contract RockPaperScissor is Stoppable{
 
         games[_gameID].gameStatus = GameStatus.Bet;
         games[_gameID].movePlayer2 = movePlayer2;
-
+        secrets[_secretHand] = true;
+        
         emit GameChangeStatusLog(_gameID, GameStatus.Bet);
         emit PlayerHashMoveLog(msg.sender, movePlayer2.hashMove, _gameID);
 
