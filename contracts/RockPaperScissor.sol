@@ -34,9 +34,13 @@ contract RockPaperScissor is Stoppable{
         WinStatus winStatus;
     }
 
+    struct Balance {
+        uint balance;
+        uint balance_locked;
+    }
+
     mapping(uint => GameMetaData) private games;
-    mapping(address => uint) public balances;
-    mapping(address => uint) public balances_locked;
+    mapping(address => Balance) private balances;
     mapping(bytes32 => bool) public secrets;
 
     event GameMetaDataLog(uint indexed gameID, uint bet, address indexed player1, address indexed player2, uint expirationTime, uint freeBetTime);
@@ -45,6 +49,7 @@ contract RockPaperScissor is Stoppable{
     event PlayerShowHandLog(address indexed player, Hand hand, uint gameID);
     event VictoryLog(uint indexed gameID, WinStatus winStatus);
     event DepositLog(address indexed who, uint amount);
+    event DepositLockedLog(address indexed who, uint amount);
     event AwardsLog(address indexed who, uint amount, uint penality);
     event WithdrawBalanceLog(address indexed who, uint amount);
 
@@ -57,11 +62,16 @@ contract RockPaperScissor is Stoppable{
         withdrawGasLimit = _withdrawGasLimit;
     }
 
+    function getBalance(address _address) public view returns(uint, uint){
+        Balance memory balance = balances[_address];
+        return (balance.balance, balance.balance_locked);
+    }
+
     function deposit() public payable onlyIfRunning returns(bool){
         require(msg.sender != address(0), "RockPaperScissor.deposit, Address can't be null");
         require(msg.value > uint(0), "RockPaperScissor.deposit, msg.value has to be greater than 0");
         emit DepositLog(msg.sender, msg.value);
-        balances[msg.sender] = balances[msg.sender].add(msg.value);
+        balances[msg.sender].balance = balances[msg.sender].balance.add(msg.value);
     }
 
     function encryptHand(Hand _hand, bytes32 _encryptHandKey) public view returns(bytes32){
@@ -81,7 +91,7 @@ contract RockPaperScissor is Stoppable{
         require(msg.sender != address(0x0), "RockPaperScissor.createGame, Sender can't be null");
         require(msg.sender != _opponent, "RockPaperScissor.createGame, Sender can't be the opponent");
         require(_opponent != address(0x0), "RockPaperScissor.createGame, Opponent can't be null");
-        require(balances[msg.sender] >= _bet, "RockPaperScissor.createGame, Not enough wei to do this bet");
+        require(balances[msg.sender].balance >= _bet, "RockPaperScissor.createGame, Not enough wei to do this bet");
         require(_secretHand != bytes32(0), "RockPaperScissor.createGame, Secret Hand not valid");
         require(!secrets[_secretHand], "Secret Hand not allowed");
 
@@ -109,19 +119,21 @@ contract RockPaperScissor is Stoppable{
 
         games[newGameID] = game;
         secrets[_secretHand] = true;
-        balances_locked[msg.sender] = balances_locked[msg.sender].add(bet);
+        balances[msg.sender].balance_locked = balances[msg.sender].balance_locked.add(_bet);
+
         emit GameChangeStatusLog(newGameID, GameStatus.Created);
         emit GameMetaDataLog(newGameID, game.bet, game.player1, game.player2, game.expirationTime, game.freeBetTime);
         emit PlayerHashMoveLog(game.player1, game.movePlayer1.hashMove, newGameID);
-
+        emit DepositLockedLog(game.player1, game.bet);
         return newGameID;
     }
 
  function challangeAccepted(uint _gameID, bytes32 _secretHand) external isGameAvailable(_gameID) onlyIfRunning payable returns(bool){
         GameMetaData memory game = games[_gameID];
-
+        Balance memory balance = balances[msg.sender];
+        uint balance_available = balance.balance.sub(balance.balance_locked);
         require(_secretHand != bytes32(0), "RockPaperScissor.challangeAccepted, Secret Hand not valid");
-        require(balances[msg.sender] >= game.bet, "RockPaperScissor.challangeAccepted, Not enough wei on sender's balance to bet this game");
+        require(balance_available >= game.bet, "RockPaperScissor.challangeAccepted, Not enough wei on sender's balance to bet this game");
         require(game.gameStatus == GameStatus.Created, "RockPaperScissor.challangeAccepted, This game is not created yet or challange already accepted");
         require(game.player2 == msg.sender, "RockPaperScissor.challangeAccepted, You must be a declared opponent");
         require(!secrets[_secretHand], "Secret Hand not allowed");
@@ -134,10 +146,11 @@ contract RockPaperScissor is Stoppable{
         games[_gameID].gameStatus = GameStatus.Bet;
         games[_gameID].movePlayer2 = movePlayer2;
         secrets[_secretHand] = true;
-        balances_locked[msg.sender] = balances_locked[msg.sender].add(bet);
+        balances[msg.sender].balance_locked = balances[msg.sender].balance_locked.add(game.bet);
 
         emit GameChangeStatusLog(_gameID, GameStatus.Bet);
         emit PlayerHashMoveLog(msg.sender, movePlayer2.hashMove, _gameID);
+        emit DepositLockedLog(game.player2, game.bet);
 
         return true;
     }
@@ -148,7 +161,7 @@ contract RockPaperScissor is Stoppable{
         GameMetaData memory game = games[_gameID];
 
         require(game.player1==msg.sender || game.player2==msg.sender, "msg.sener is not a player");
-
+        require(game.gameStatus != GameStatus.Closed, "Game already closed");
         Hand player1Hand = game.handPlayer1;
         Hand player2Hand = game.handPlayer2;
         GameStatus newGameStatus;
@@ -194,6 +207,8 @@ contract RockPaperScissor is Stoppable{
 
     function GameAward(uint _gameID) external isGameAvailable(_gameID) onlyIfRunning returns(bool){
         GameMetaData memory game = games[_gameID];
+        Balance memory newBalanceP1;
+        Balance memory newBalanceP2;
 
         require(game.gameStatus == GameStatus.Closed, "Game not over");
         require((game.player1 == msg.sender && game.winStatus == WinStatus.Player1) || (game.player2 == msg.sender && game.winStatus == WinStatus.Player2), "Player 1 address dismatch or Player 1 is not the winner");
@@ -202,8 +217,8 @@ contract RockPaperScissor is Stoppable{
         uint weight = game.bet.div(game.expirationTime.sub(game.freeBetTime)).div(uint(2)); // player2 can lose maximum half of bet
 
         if(game.winStatus == WinStatus.Player1) {
-            balances[game.player1] = balances[game.player1].add(game.bet);
-            balances[game.player2] = balances[game.player2].sub(game.bet);
+            newBalanceP1.balance = balances[game.player1].balance.add(game.bet);
+            newBalanceP2.balance = balances[game.player2].balance.sub(game.bet);
         } else {
             if(game.movePlayer2.timestamp <= game.freeBetTime){
                 penality = uint(0);
@@ -213,15 +228,21 @@ contract RockPaperScissor is Stoppable{
                 penality = game.expirationTime.sub(game.freeBetTime);
             }
             penality = penality.mul(weight);
-            balances[game.player2] = balances[game.player2].add(game.bet).sub(penality);
-            balances[game.player1] = balances[game.player1].sub(game.bet).add(penality);
+            newBalanceP2.balance = balances[game.player2].balance.add(game.bet).sub(penality);
+            newBalanceP1.balance = balances[game.player1].balance.sub(game.bet).add(penality);
         }
 
         games[_gameID].gameStatus = GameStatus.Stopped;
-        balances_locked[game.player1] = balances_locked[game.player1].sub(game.bet);
-        balances_locked[game.player2] = balances_locked[game.player2].sub(game.bet);
+        newBalanceP1.balance_locked = balances[game.player1].balance_locked.sub(game.bet);
+        newBalanceP2.balance_locked = balances[game.player2].balance_locked.sub(game.bet);
+
+        balances[game.player1] = newBalanceP1;
+        balances[game.player2] = newBalanceP2;
+
         emit AwardsLog(msg.sender, game.bet, penality);
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
+        emit DepositLockedLog(game.player1, newBalanceP1.balance_locked);
+        emit DepositLockedLog(game.player2, newBalanceP2.balance_locked);
 
         return true;
     }
@@ -238,28 +259,52 @@ contract RockPaperScissor is Stoppable{
     }
 
     function withdrawBalance() public returns(bool success){
-        uint balance = balances[msg.sender];
-        uint balance_locked = balances_locked[msg.sender];
+        Balance memory balance = balances[msg.sender];
+        uint delta = balance.balance.sub(balance.balance_locked);
 
-        require(balance != uint(0) && balance_locked == uint(0), "Remittance.withdrawBalance#001 : Balance can't be equal to 0");
+        require(delta != uint(0), "RockPaperScissor.withdrawBalance, Delta Balance can't be equal to 0");
 
-        balances[msg.sender] = uint(0);
+        balances[msg.sender].balance = balance.balance_locked;
 
-        emit WithdrawBalanceLog(msg.sender, balance);
+        emit WithdrawBalanceLog(msg.sender, delta);
 
-        (success, ) = msg.sender.call{gas: withdrawGasLimit, value : balance}(""); 
+        (success, ) = msg.sender.call{gas: withdrawGasLimit, value : delta}(""); 
         require(success);
     }
 
     function stopGame(uint _gameID) external isGameAvailable(_gameID) onlyIfRunning returns(bool){
         GameMetaData memory game = games[_gameID];
-        require(game.gameStatus != GameStatus.Closed || game.gameStatus != GameStatus.Stopped, "Game already closed or stopped");
-        require(game.player1 == msg.sender, "Sender is not a creator");
-        games[_gameID].gameStatus = GameStatus.Closed;
-        balances_locked[game.player1] = balances_locked[game.player1].sub(game.bet);
-        balances_locked[game.player2] = balances_locked[game.player2].sub(game.bet);
-        emit AwardsLog(msg.sender, game.bet, penality);
+
+        require(game.gameStatus != GameStatus.Closed && game.gameStatus != GameStatus.Stopped && game.gameStatus != GameStatus.Null, "Game already closed or stopped");
+        require(game.player1 == msg.sender || game.player2 == msg.sender, "Sender is not a player");
+        if(game.player1 == msg.sender) {
+            require(game.gameStatus != GameStatus.WaitingP1, "RockPaperScissor.stopGame, Player1 can't stop the game after have known the hand of the other player");
+        } else {
+            require(game.gameStatus != GameStatus.WaitingP2, "RockPaperScissor.stopGame, Player2 can't stop the game after have known the hand of the other player");
+        }
+        require(game.expirationTime < now, "RockPaperScissor.stopGame, Game can't be stopped before the expirationTime");
+
+        games[_gameID].gameStatus = GameStatus.Stopped;
+
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
+
+        if(game.gameStatus == GameStatus.Created){
+            // Unlock only player1 balance
+            uint newBalanceLockedP1 = balances[game.player1].balance_locked.sub(game.bet);
+            balances[game.player1].balance_locked = newBalanceLockedP1;
+            emit DepositLockedLog(game.player1, newBalanceLockedP1);
+        } else {
+            uint newBalanceLockedP1 = balances[game.player1].balance_locked.sub(game.bet);
+            uint newBalanceLockedP2 = balances[game.player2].balance_locked.sub(game.bet);
+            balances[game.player1].balance_locked = newBalanceLockedP1;
+            balances[game.player2].balance_locked = newBalanceLockedP2;
+            emit DepositLockedLog(game.player1, newBalanceLockedP1);
+            emit DepositLockedLog(game.player2, newBalanceLockedP2);
+        }
+
+
+
+
     }
 
 }
