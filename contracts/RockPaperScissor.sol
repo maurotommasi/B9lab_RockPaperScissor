@@ -119,12 +119,13 @@ contract RockPaperScissor is Stoppable{
 
         games[newGameID] = game;
         secrets[_secretHand] = true;
-        balances[msg.sender].balance_locked = balances[msg.sender].balance_locked.add(_bet);
+        uint newBalanceLocked = balances[msg.sender].balance_locked.add(_bet);
+        balances[msg.sender].balance_locked = newBalanceLocked;
 
         emit GameChangeStatusLog(newGameID, GameStatus.Created);
         emit GameMetaDataLog(newGameID, game.bet, game.player1, game.player2, game.expirationTime, game.freeBetTime);
         emit PlayerHashMoveLog(game.player1, game.movePlayer1.hashMove, newGameID);
-        emit DepositLockedLog(game.player1, game.bet);
+        emit DepositLockedLog(msg.sender, newBalanceLocked);
         return newGameID;
     }
 
@@ -146,11 +147,12 @@ contract RockPaperScissor is Stoppable{
         games[_gameID].gameStatus = GameStatus.Bet;
         games[_gameID].movePlayer2 = movePlayer2;
         secrets[_secretHand] = true;
-        balances[msg.sender].balance_locked = balances[msg.sender].balance_locked.add(game.bet);
+        uint newBalanceLocked = balances[msg.sender].balance_locked.add(_bet);
+        balances[msg.sender].balance_locked = newBalanceLocked;
 
         emit GameChangeStatusLog(_gameID, GameStatus.Bet);
         emit PlayerHashMoveLog(msg.sender, movePlayer2.hashMove, _gameID);
-        emit DepositLockedLog(game.player2, game.bet);
+        emit DepositLockedLog(msg.sender, newBalanceLocked);
 
         return true;
     }
