@@ -394,7 +394,7 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
     });
 
-    it("Game Stop", async function() {
+    it("Game Stop - GameStatus: Created", async function() {
         // PLAYER 1 - CREATE GAME
         assert(await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT}));
         const secretHandP1 = await rockPaperScissor.encryptHand.call(HAND.ROCK, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
@@ -407,6 +407,94 @@ contract("RockPaperScissor", accounts => {
         txObj.logs[0].event = "GameChangeStatusLog";
         assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
+        txObj.logs[1].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+    });
+
+    it("Game Stop - GameStatus: Bet", async function() {
+        // PLAYER 1 - CREATE GAME
+        assert(await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT}));
+        const secretHandP1 = await rockPaperScissor.encryptHand.call(HAND.ROCK, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        const createGame = await rockPaperScissor.createGame(player2, BET, EXPIRATION_TIME, FREE_BET_TIME, secretHandP1, {from : player1});
+        const gameID = createGame.logs[0].args.gameID;
+        // PLAYER 2 - CHALLANGE ACCEPTED
+        assert(await rockPaperScissor.deposit({from : player2, value : DEPOSIT_AMOUNT}));
+        const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2});
+        wait(5000) //game expired
+        const txObj = await rockPaperScissor.stopGame(gameID, {from : player1});
+        
+        // LOG MATCHING
+        txObj.logs[0].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[0].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
+
+        txObj.logs[1].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+
+        txObj.logs[2].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[2].args.who, player2, "Player Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+    });
+
+    it("Game Stop - GameStatus: WaitingP2 (from p1)", async function() {
+        // PLAYER 1 - CREATE GAME
+        assert(await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT}));
+        const secretHandP1 = await rockPaperScissor.encryptHand.call(HAND.ROCK, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        const createGame = await rockPaperScissor.createGame(player2, BET, EXPIRATION_TIME, FREE_BET_TIME, secretHandP1, {from : player1});
+        const gameID = createGame.logs[0].args.gameID;
+        // PLAYER 2 - CHALLANGE ACCEPTED
+        assert(await rockPaperScissor.deposit({from : player2, value : DEPOSIT_AMOUNT}));
+        const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2});
+         // PLAYER 1 - SHOW HAND
+        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        wait(5000) //game expired
+        const txObj = await rockPaperScissor.stopGame(gameID, {from : player1});
+        
+        // LOG MATCHING
+        txObj.logs[0].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[0].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
+
+        txObj.logs[1].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+
+        txObj.logs[2].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[2].args.who, player2, "Player Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+    });
+
+    it("Game Stop - GameStatus: WaitingP1 (from p2)", async function() {
+        // PLAYER 1 - CREATE GAME
+        assert(await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT}));
+        const secretHandP1 = await rockPaperScissor.encryptHand.call(HAND.ROCK, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        const createGame = await rockPaperScissor.createGame(player2, BET, EXPIRATION_TIME, FREE_BET_TIME, secretHandP1, {from : player1});
+        const gameID = createGame.logs[0].args.gameID;
+        // PLAYER 2 - CHALLANGE ACCEPTED
+        assert(await rockPaperScissor.deposit({from : player2, value : DEPOSIT_AMOUNT}));
+        const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2});
+         // PLAYER 2 - SHOW HAND
+        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        wait(5000) //game expired
+        const txObj = await rockPaperScissor.stopGame(gameID, {from : player2});
+        
+        // LOG MATCHING
+        txObj.logs[0].event = "GameChangeStatusLog";
+        assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[0].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
+
+        txObj.logs[1].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+
+        txObj.logs[2].event = "DepositLockedLog";
+        assert.strictEqual(txObj.logs[2].args.who, player2, "Player Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
     });
 
     });

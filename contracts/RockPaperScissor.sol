@@ -244,6 +244,8 @@ contract RockPaperScissor is Stoppable{
         emit DepositLockedLog(game.player1, newBalanceP1.balance_locked);
         emit DepositLockedLog(game.player2, newBalanceP2.balance_locked);
 
+        delete games[_gameID];
+
         return true;
     }
 
@@ -302,8 +304,7 @@ contract RockPaperScissor is Stoppable{
             emit DepositLockedLog(game.player2, newBalanceLockedP2);
         }
 
-
-
+        delete games[_gameID];
 
     }
 
