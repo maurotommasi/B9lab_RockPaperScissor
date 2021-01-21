@@ -14,6 +14,7 @@ contract("RockPaperScissor", accounts => {
     const EXPIRATION_TIME                   = 3; //seconds
     const FREE_BET_TIME                     = 1; //seconds
     const ENCRYPT_HAND_KEY                  = ({PLAYER1:soliditySha3("key-player1"),PLAYER2:soliditySha3("key-player2")});
+    const PENALITY_RATIO                    = 2;
 
     let owner, player1, player2, stranger;
     let rockPaperScissor;
@@ -246,7 +247,7 @@ contract("RockPaperScissor", accounts => {
         const oldBalance = (await rockPaperScissor.getBalance.call(player1))[0];
         const txObj = await rockPaperScissor.GameAward(gameID, {from : player1});
         const newBalance = (await rockPaperScissor.getBalance.call(player1))[0];
-        assert.strictEqual((newBalance - oldBalance).toString(10), BET.toString(10));
+        assert.strictEqual(toBN(newBalance).sub(toBN(oldBalance)).toString(10), toBN(BET).toString(10));
         // LOG MATCHING
         txObj.logs[0].event = "AwardsLog";
         assert.strictEqual(txObj.logs[0].args.who, player1, "player1 Dismatch"); 
@@ -289,7 +290,7 @@ contract("RockPaperScissor", accounts => {
         const oldBalance = (await rockPaperScissor.getBalance.call(player2))[0];
         const txObj = await rockPaperScissor.GameAward(gameID, {from : player2});
         const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
-        assert.strictEqual((newBalance - oldBalance).toString(10), BET.toString(10));
+        assert.strictEqual((toBN(newBalance).sub(toBN(oldBalance))).toString(10), BET.toString(10));
         // DEFINING NULL PENALITY
         assert(timestampP2 <= freeBetTime);
         // LOG MATCHING
@@ -297,6 +298,7 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[0].args.who, player2, "player1 Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), "0", "Penality Dismatch");
+        assert.strictEqual(toBN(newBalance).sub(toBN(oldBalance)).toString(10), toBN(BET).toString(10));
         txObj.logs[1].event = "GameChangeStatusLog";
         assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
@@ -338,14 +340,14 @@ contract("RockPaperScissor", accounts => {
         const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
         // DEFINING PENALITY
         assert((freeBetTime < timestampP2) && (timestampP2 <= expirationTime));
-        const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / 2));
+        const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / PENALITY_RATIO)); //expirationTime > freeBetTime, always
         const penality = (timestampP2 - freeBetTime) * weight;
         // LOG MATCHING
         txObj.logs[0].event = "AwardsLog";
         assert.strictEqual(txObj.logs[0].args.who, player2, "player1 Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), penality.toString(10), "Penality Dismatch");
-        assert.strictEqual((newBalance - oldBalance).toString(10), (BET - penality).toString(10));
+        assert.strictEqual((toBN(newBalance).sub(toBN(oldBalance))).toString(10), toBN(BET).sub(toBN(penality)).toString(10));
         txObj.logs[1].event = "GameChangeStatusLog";
         assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
@@ -381,14 +383,14 @@ contract("RockPaperScissor", accounts => {
         const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
         // DEFINING PENALITY
         assert((expirationTime < timestampP2));
-        const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / 2));
+        const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / PENALITY_RATIO));
         const penality = (expirationTime - freeBetTime) * weight;
         // LOG MATCHING
         txObj.logs[0].event = "AwardsLog";
         assert.strictEqual(txObj.logs[0].args.who, player2, "player1 Dismatch"); 
         assert.strictEqual(txObj.logs[0].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
         assert.strictEqual(txObj.logs[0].args.penality.toString(10), penality.toString(10), "Penality Dismatch");
-        assert.strictEqual((newBalance - oldBalance).toString(10), (BET - penality).toString(10));
+        assert.strictEqual((toBN(newBalance).sub(toBN(oldBalance))).toString(10), toBN(BET).sub(toBN(penality)).toString(10));
         txObj.logs[1].event = "GameChangeStatusLog";
         assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");

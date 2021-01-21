@@ -8,8 +8,9 @@ contract RockPaperScissor is Stoppable{
 
     using SafeMath for uint;
 
-    uint withdrawGasLimit;
-    uint gameID;
+    uint public withdrawGasLimit;
+    uint public gameID;
+    uint constant penalityRatio = uint(2);
 
     enum Hand       {Null, Rock, Paper, Scissor} 
     enum WinStatus  {Null, Player1, Player2, Pair} 
@@ -52,6 +53,7 @@ contract RockPaperScissor is Stoppable{
     event DepositLockedLog(address indexed who, uint amount);
     event AwardsLog(address indexed who, uint amount, uint penality);
     event WithdrawBalanceLog(address indexed who, uint amount);
+    event WithdrawGasLimitChangedLog(address indexed owner, uint maxGas);
 
     modifier isGameAvailable(uint _gameID) {
         require(_gameID >= 0 && _gameID <= gameID, "gameID not valid");
@@ -147,7 +149,7 @@ contract RockPaperScissor is Stoppable{
         games[_gameID].gameStatus = GameStatus.Bet;
         games[_gameID].movePlayer2 = movePlayer2;
         secrets[_secretHand] = true;
-        uint newBalanceLocked = balances[msg.sender].balance_locked.add(_bet);
+        uint newBalanceLocked = balances[msg.sender].balance_locked.add(game.bet);
         balances[msg.sender].balance_locked = newBalanceLocked;
 
         emit GameChangeStatusLog(_gameID, GameStatus.Bet);
@@ -216,7 +218,7 @@ contract RockPaperScissor is Stoppable{
         require((game.player1 == msg.sender && game.winStatus == WinStatus.Player1) || (game.player2 == msg.sender && game.winStatus == WinStatus.Player2), "Player 1 address dismatch or Player 1 is not the winner");
 
         uint penality;
-        uint weight = game.bet.div(game.expirationTime.sub(game.freeBetTime)).div(uint(2)); // player2 can lose maximum half of bet
+        uint weight = game.bet.div(game.expirationTime.sub(game.freeBetTime)).div(penalityRatio); // player2 can lose maximum 1 / penalityRatio of the bet
 
         if(game.winStatus == WinStatus.Player1) {
             newBalanceP1.balance = balances[game.player1].balance.add(game.bet);
@@ -309,5 +311,13 @@ contract RockPaperScissor is Stoppable{
         delete games[_gameID];
 
     }
+
+    function changeWithdrawGasLimit(uint _withdrawGasLimit) public onlyOwner returns(bool){
+        uint currectWithdrawGasLimit = withdrawGasLimit;
+        require(currectWithdrawGasLimit != _withdrawGasLimit, "Can't have the same gas");
+        withdrawGasLimit = _withdrawGasLimit;
+        emit WithdrawGasLimitChangedLog(msg.sender, _withdrawGasLimit);
+    }
+
 
 }
