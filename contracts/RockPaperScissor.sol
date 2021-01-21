@@ -159,68 +159,88 @@ contract RockPaperScissor is Stoppable{
         return true;
     }
 
-    function showHand(uint _gameID, bytes32 _encryptHandKey) external isGameAvailable(_gameID) onlyIfRunning returns(GameStatus, WinStatus){
+    function showHandP1(uint _gameID, bytes32 _encryptHandKey) external isGameAvailable(_gameID) onlyIfRunning returns(GameStatus){
         require(_encryptHandKey != bytes32(0), "Encrypt Key not valid");
 
         GameMetaData memory game = games[_gameID];
 
-        require(game.player1==msg.sender || game.player2==msg.sender, "msg.sener is not a player");
-        require(game.gameStatus != GameStatus.Closed, "Game already closed");
+        require(game.gameStatus == GameStatus.Bet || game.gameStatus == GameStatus.WaitingP1, "Dismatch Status Game");
+        require(game.player1 == msg.sender, "msg.sender is not a player");
+
         Hand player1Hand = game.handPlayer1;
+        GameStatus newGameStatus;
+
+        player1Hand = decryptHand(game.movePlayer1.hashMove, _encryptHandKey);
+        require(player1Hand != Hand.Null, "Incorrect Decrypt key");
+
+        if(game.gameStatus == GameStatus.Bet){
+            newGameStatus = GameStatus.WaitingP2;
+        } else {
+            newGameStatus = GameStatus.Closed;
+        }
+
+        games[_gameID].handPlayer1 = player1Hand;
+        games[_gameID].gameStatus = newGameStatus;
+
+        emit PlayerShowHandLog(msg.sender, player1Hand, _gameID);
+        emit GameChangeStatusLog(_gameID, newGameStatus);
+
+        return newGameStatus;
+    }
+
+    function showHandP2(uint _gameID, bytes32 _encryptHandKey) external isGameAvailable(_gameID) onlyIfRunning returns(GameStatus){
+        require(_encryptHandKey != bytes32(0), "Encrypt Key not valid");
+
+        GameMetaData memory game = games[_gameID];
+
+        require(game.gameStatus == GameStatus.Bet || game.gameStatus == GameStatus.WaitingP2, "Dismatch Status Game");
+        require(game.player2 == msg.sender, "msg.sender is not a player");
+        require(game.gameStatus != GameStatus.Closed, "Game already closed");
+
         Hand player2Hand = game.handPlayer2;
         GameStatus newGameStatus;
 
-        if(game.player1==msg.sender){
-            require(game.gameStatus == GameStatus.Bet || game.gameStatus == GameStatus.WaitingP1, "Dismatch Status Game");
-            player1Hand = decryptHand(game.movePlayer1.hashMove, _encryptHandKey);
-            if(game.gameStatus == GameStatus.Bet){
-                newGameStatus = GameStatus.WaitingP2;
-            } else {
-                newGameStatus = GameStatus.Closed;
-            }
-            require(player1Hand != Hand.Null, "Incorrect Decrypt key");
-            games[_gameID].handPlayer1 = player1Hand;
-            emit PlayerShowHandLog(msg.sender, player1Hand, _gameID);
+        player2Hand = decryptHand(game.movePlayer2.hashMove, _encryptHandKey);
+        require(player2Hand != Hand.Null, "Incorrect Decrypt key");
+
+        if(game.gameStatus == GameStatus.Bet){
+            newGameStatus = GameStatus.WaitingP1;
         } else {
-            require(game.gameStatus == GameStatus.Bet || game.gameStatus == GameStatus.WaitingP2, "Dismatch Status Game");
-            player2Hand = decryptHand(game.movePlayer2.hashMove, _encryptHandKey);
-            if(game.gameStatus == GameStatus.Bet){
-                newGameStatus = GameStatus.WaitingP1;
-            } else {
-                newGameStatus = GameStatus.Closed;
-            }
-            require(player2Hand != Hand.Null, "Incorrect Decrypt key");
-            games[_gameID].handPlayer2 = player2Hand;
-            emit PlayerShowHandLog(msg.sender, player2Hand, _gameID);
+            newGameStatus = GameStatus.Closed;
         }
 
+        games[_gameID].handPlayer2 = player2Hand;
         games[_gameID].gameStatus = newGameStatus;
 
-        WinStatus winStatus;
-
-        if(newGameStatus == GameStatus.Closed){
-            winStatus = coreLogic(player1Hand, player2Hand);
-            games[_gameID].winStatus = winStatus;
-            emit VictoryLog(_gameID, winStatus);
-        } 
-
+        emit PlayerShowHandLog(msg.sender, player2Hand, _gameID);
         emit GameChangeStatusLog(_gameID, newGameStatus);
 
-        return (newGameStatus, winStatus);
+        return newGameStatus;
     }
 
-    function GameAward(uint _gameID) external isGameAvailable(_gameID) onlyIfRunning returns(bool){
+    function getWinner(uint _gameID) external isGameAvailable(_gameID) view returns(WinStatus){
+        // useful for UI to know who is the winner
         GameMetaData memory game = games[_gameID];
+        return coreLogic(game.handPlayer1, game.handPlayer2);
+    }
+
+    function gameAward(uint _gameID) external isGameAvailable(_gameID) onlyIfRunning returns(WinStatus){
+        GameMetaData memory game = games[_gameID];
+
+        require(game.gameStatus == GameStatus.Closed, "GameStatus Dismatch");
+
+        WinStatus winStatus = coreLogic(game.handPlayer1, game.handPlayer2);
+        //games[_gameID].winStatus = winStatus; // commented cause the game is deleted after all
+
         Balance memory newBalanceP1;
         Balance memory newBalanceP2;
 
-        require(game.gameStatus == GameStatus.Closed, "Game not over");
-        require((game.player1 == msg.sender && game.winStatus == WinStatus.Player1) || (game.player2 == msg.sender && game.winStatus == WinStatus.Player2), "Player 1 address dismatch or Player 1 is not the winner");
+        require((game.player1 == msg.sender && winStatus == WinStatus.Player1) || (game.player2 == msg.sender && winStatus == WinStatus.Player2), "Sender is not the winner or a player");
 
         uint penality;
         uint weight = game.bet.div(game.expirationTime.sub(game.freeBetTime)).div(penalityRatio); // player2 can lose maximum 1 / penalityRatio of the bet
 
-        if(game.winStatus == WinStatus.Player1) {
+        if(winStatus == WinStatus.Player1) {
             newBalanceP1.balance = balances[game.player1].balance.add(game.bet);
             newBalanceP2.balance = balances[game.player2].balance.sub(game.bet);
         } else {
@@ -236,7 +256,7 @@ contract RockPaperScissor is Stoppable{
             newBalanceP1.balance = balances[game.player1].balance.sub(game.bet).add(penality);
         }
 
-        games[_gameID].gameStatus = GameStatus.Stopped;
+        //games[_gameID].gameStatus = GameStatus.Stopped;
         newBalanceP1.balance_locked = balances[game.player1].balance_locked.sub(game.bet);
         newBalanceP2.balance_locked = balances[game.player2].balance_locked.sub(game.bet);
 
@@ -247,10 +267,11 @@ contract RockPaperScissor is Stoppable{
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
         emit DepositLockedLog(game.player1, newBalanceP1.balance_locked);
         emit DepositLockedLog(game.player2, newBalanceP2.balance_locked);
+        emit VictoryLog(_gameID, winStatus);
 
         delete games[_gameID];
 
-        return true;
+        return winStatus;
     }
 
     function coreLogic(Hand _hand1, Hand _hand2) private onlyIfRunning view returns(WinStatus){
@@ -281,7 +302,7 @@ contract RockPaperScissor is Stoppable{
     function stopGame(uint _gameID) external isGameAvailable(_gameID) onlyIfRunning returns(bool){
         GameMetaData memory game = games[_gameID];
 
-        require(game.gameStatus != GameStatus.Closed && game.gameStatus != GameStatus.Stopped && game.gameStatus != GameStatus.Null, "Game already closed or stopped");
+        require(game.gameStatus != GameStatus.Closed && game.gameStatus != GameStatus.Null, "Game already closed or stopped");
         require(game.player1 == msg.sender || game.player2 == msg.sender, "Sender is not a player");
         if(game.player1 == msg.sender) {
             require(game.gameStatus != GameStatus.WaitingP1, "RockPaperScissor.stopGame, Player1 can't stop the game after have known the hand of the other player");
@@ -290,7 +311,7 @@ contract RockPaperScissor is Stoppable{
         }
         require(game.expirationTime < now, "RockPaperScissor.stopGame, Game can't be stopped before the expirationTime");
 
-        games[_gameID].gameStatus = GameStatus.Stopped;
+        //games[_gameID].gameStatus = GameStatus.Stopped;
 
         emit GameChangeStatusLog(_gameID, GameStatus.Stopped);
 

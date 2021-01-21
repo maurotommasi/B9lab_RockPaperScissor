@@ -16,7 +16,7 @@ contract("RockPaperScissor", accounts => {
     const FREE_BET_TIME                     = 1; //seconds
     const ENCRYPT_HAND_KEY                  = ({PLAYER1:soliditySha3("key-player1"),PLAYER2:soliditySha3("key-player2")});
     const PENALITY_RATIO                    = 2;
-
+    const BALANCE_TYPE                      = ({GROSS:0,LOCKED:1});
     let owner, player1, player2, stranger;
     let rockPaperScissor;
 
@@ -41,17 +41,17 @@ contract("RockPaperScissor", accounts => {
     describe("Init Data", () => {
 
         it("Player balances have to be null at the begin", async function() {
-            assert.strictEqual((await rockPaperScissor.getBalance.call(player1))[0].toString(10), "0"); // --balance
-            assert.strictEqual((await rockPaperScissor.getBalance.call(player1))[1].toString(10), "0"); // --locked
-            assert.strictEqual((await rockPaperScissor.getBalance.call(player2))[0].toString(10), "0"); // --balance
-            assert.strictEqual((await rockPaperScissor.getBalance.call(player2))[1].toString(10), "0"); // --locked
+            assert.strictEqual((await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.GROSS].toString(10), "0"); // --balance
+            assert.strictEqual((await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.LOCKED].toString(10), "0"); // --locked
+            assert.strictEqual((await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS].toString(10), "0"); // --balance
+            assert.strictEqual((await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.LOCKED].toString(10), "0"); // --locked
         })
     })
 
     describe("Unit Testing", () => {
         it("Player Can deposit an amount", async function() {
             const txObj = await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT});
-            const balance = (await rockPaperScissor.getBalance.call(player1))[0];
+            const balance = (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.GROSS];
             assert.strictEqual(txObj.logs[0].args.who, player1);
             assert.strictEqual(txObj.logs[0].args.amount.toString(10), DEPOSIT_AMOUNT.toString(10));
             assert.strictEqual(txObj.logs[0].args.amount.toString(10), balance.toString(10));
@@ -137,7 +137,7 @@ contract("RockPaperScissor", accounts => {
             assert.strictEqual(txObj.logs[2].args.amount.toString(10), BET.toString(10), "Amount Dismatch");
        });
 
-       it("Show Hand: P1->P2", async function() {
+       it("Show Hand P1->P2", async function() {
             // PLAYER 1 - CREATE GAME
             assert(await rockPaperScissor.deposit({from : player1, value : DEPOSIT_AMOUNT}));
             const secretHandP1 = await rockPaperScissor.encryptHand.call(HAND.ROCK, ENCRYPT_HAND_KEY.PLAYER1, {from : player1}); 
@@ -147,7 +147,7 @@ contract("RockPaperScissor", accounts => {
             const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
             assert(await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2})); 
             // PLAYER 1 - SHOW HAND
-            let txObj = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+            let txObj = await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
             // LOG MATCHING
             txObj.logs[0].event = "PlayerShowHandLog";
             assert.strictEqual(txObj.logs[0].args.player, player1, "player1 Dismatch"); 
@@ -157,18 +157,15 @@ contract("RockPaperScissor", accounts => {
             assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
             assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.WAITINGP2).toString(10), "GameStatus Dismatch");
             // PLAYER 2 - SHOW HAND
-            txObj = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+            txObj = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
             // LOG MATCHING
             txObj.logs[0].event = "PlayerShowHandLog";
             assert.strictEqual(txObj.logs[0].args.player, player2, "player2 Dismatch"); 
             assert.strictEqual(txObj.logs[0].args.hand.toString(10), toBN(HAND.PAPER).toString(10), "PlayerHand Dismatch");
             assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch");
-            txObj.logs[1].event = "VictoryLog";
+            txObj.logs[1].event = "GameChangeStatusLog";
             assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
-            assert.strictEqual(txObj.logs[1].args.winStatus.toString(10), toBN(WIN_STATUS.PLAYER2).toString(10), "GameStatus Dismatch"); //P1: ROCK, P2: PAPER
-            txObj.logs[2].event = "GameChangeStatusLog";
-            assert.strictEqual(txObj.logs[2].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
-            assert.strictEqual(txObj.logs[2].args.gameStatus.toString(10), toBN(GAME_STATUS.CLOSED).toString(10), "GameStatus Dismatch");
+            assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.CLOSED).toString(10), "GameStatus Dismatch");
         });
 
         it("Show Hand: P2->P1", async function() {
@@ -181,7 +178,7 @@ contract("RockPaperScissor", accounts => {
             const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
             assert(await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2})); 
             // PLAYER 2- SHOW HAND
-            let txObj = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+            let txObj = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
             // LOG MATCHING
             txObj.logs[0].event = "PlayerShowHandLog";
             assert.strictEqual(txObj.logs[0].args.player, player2, "player2 Dismatch"); 
@@ -191,18 +188,15 @@ contract("RockPaperScissor", accounts => {
             assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
             assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.WAITINGP1).toString(10), "GameStatus Dismatch");
             // PLAYER 1 - SHOW HAND
-            txObj = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+            txObj = await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
             // LOG MATCHING
             txObj.logs[0].event = "PlayerShowHandLog";
             assert.strictEqual(txObj.logs[0].args.player, player1, "player1 Dismatch"); 
             assert.strictEqual(txObj.logs[0].args.hand.toString(10), toBN(HAND.ROCK).toString(10), "PlayerHand Dismatch");
             assert.strictEqual(txObj.logs[0].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch");
-            txObj.logs[1].event = "VictoryLog";
+            txObj.logs[1].event = "GameChangeStatusLog";
             assert.strictEqual(txObj.logs[1].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
-            assert.strictEqual(txObj.logs[1].args.winStatus.toString(10), toBN(WIN_STATUS.PLAYER2).toString(10), "GameStatus Dismatch"); //P1: ROCK, P2: PAPER
-            txObj.logs[2].event = "GameChangeStatusLog";
-            assert.strictEqual(txObj.logs[2].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
-            assert.strictEqual(txObj.logs[2].args.gameStatus.toString(10), toBN(GAME_STATUS.CLOSED).toString(10), "GameStatus Dismatch");
+            assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.CLOSED).toString(10), "GameStatus Dismatch");
         });
 
         /*
@@ -239,15 +233,15 @@ contract("RockPaperScissor", accounts => {
         const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.SCISSOR, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
         assert(await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2})); 
         // PLAYER 1 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
         // PLAYER 2 - SHOW HAND
-        const showHandP2 = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
-        const winner = showHandP2.logs[1].args.winStatus;
+        const showHandP2 = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        const winner = await rockPaperScissor.getWinner.call(gameID);
         assert.strictEqual(winner.toString(10), WIN_STATUS.PLAYER1.toString(10), "Player1 must win in this case");
         // PLAYER 1 TAKE THE AWARD
-        const oldBalance = (await rockPaperScissor.getBalance.call(player1))[0];
-        const txObj = await rockPaperScissor.GameAward(gameID, {from : player1});
-        const newBalance = (await rockPaperScissor.getBalance.call(player1))[0];
+        const oldBalance = (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.GROSS];
+        const txObj = await rockPaperScissor.gameAward(gameID, {from : player1});
+        const newBalance = (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.GROSS];
         assert.strictEqual(toBN(newBalance).sub(toBN(oldBalance)).toString(10), toBN(BET).toString(10));
         // LOG MATCHING
         txObj.logs[0].event = "AwardsLog";
@@ -259,10 +253,13 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
         txObj.logs[2].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[2].args.who, player1, "Player Dismatch");
-        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
         txObj.logs[3].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[3].args.who, player2, "Player Dismatch");
-        assert.strictEqual(txObj.logs[3].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[3].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
+        txObj.logs[4].event = "VictoryLog";
+        assert.strictEqual(txObj.logs[4].args.gameID.toString(10), gameID.toString(10), "GameID Dismatch"); 
+        assert.strictEqual(txObj.logs[4].args.winStatus.toString(10), toBN(WIN_STATUS.PLAYER1).toString(10), "GameStatus Dismatch"); //P1: ROCK, P2: PAPER
     });
     
     it("GameAward -> P2 WIN with no penality. Example: P1: ROCK, P2 = PAPER", async function() {
@@ -282,15 +279,15 @@ contract("RockPaperScissor", accounts => {
         const blockNumberP2 = await web3.eth.getBlockNumber();
         const timestampP2 = (await web3.eth.getBlock(blockNumberP2)).timestamp;
         // PLAYER 1 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
         // PLAYER 2 - SHOW HAND
-        const showHandP2 = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
-        const winner = showHandP2.logs[1].args.winStatus;
+        const showHandP2 = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        const winner = await rockPaperScissor.getWinner.call(gameID);
         assert.strictEqual(winner.toString(10), WIN_STATUS.PLAYER2.toString(10), "Player2 must win in this case");
         // PLAYER 2 TAKE THE AWARD
-        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[0];
-        const txObj = await rockPaperScissor.GameAward(gameID, {from : player2});
-        const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
+        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
+        const txObj = await rockPaperScissor.gameAward(gameID, {from : player2});
+        const newBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
         assert.strictEqual((toBN(newBalance).sub(toBN(oldBalance))).toString(10), BET.toString(10));
         // DEFINING NULL PENALITY
         assert(timestampP2 <= freeBetTime);
@@ -305,10 +302,10 @@ contract("RockPaperScissor", accounts => {
         assert.strictEqual(txObj.logs[1].args.gameStatus.toString(10), toBN(GAME_STATUS.STOPPED).toString(10), "GameStatus Dismatch");
         txObj.logs[2].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[2].args.who, player1, "Player Dismatch");
-        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
         txObj.logs[3].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[3].args.who, player2, "Player Dismatch");
-        assert.strictEqual(txObj.logs[3].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[3].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
     });
 
     it("GameAward -> P2 WIN with partial penality. Example: P1: ROCK, P2 = PAPER", async function() {
@@ -330,15 +327,15 @@ contract("RockPaperScissor", accounts => {
         const blockNumberP2 = await web3.eth.getBlockNumber();
         const timestampP2 = (await web3.eth.getBlock(blockNumberP2)).timestamp;
         // PLAYER 1 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
         // PLAYER 2 - SHOW HAND
-        const showHandP2 = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
-        const winner = showHandP2.logs[1].args.winStatus;
+        const showHandP2 = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        const winner = await rockPaperScissor.getWinner.call(gameID);
         assert.strictEqual(winner.toString(10), WIN_STATUS.PLAYER2.toString(10), "Player2 must win in this case");
         // PLAYER 2 TAKE THE AWARD
-        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[0];
-        const txObj = await rockPaperScissor.GameAward(gameID, {from : player2});
-        const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
+        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
+        const txObj = await rockPaperScissor.gameAward(gameID, {from : player2});
+        const newBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
         // DEFINING PENALITY
         assert((freeBetTime < timestampP2) && (timestampP2 <= expirationTime));
         const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / PENALITY_RATIO)); //expirationTime > freeBetTime, always
@@ -373,15 +370,15 @@ contract("RockPaperScissor", accounts => {
         const blockNumberP2 = await web3.eth.getBlockNumber();
         const timestampP2 = (await web3.eth.getBlock(blockNumberP2)).timestamp;
         // PLAYER 1 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
         // PLAYER 2 - SHOW HAND
-        const showHandP2 = await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
-        const winner = showHandP2.logs[1].args.winStatus;
+        const showHandP2 = await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        const winner = await rockPaperScissor.getWinner.call(gameID);
         assert.strictEqual(winner.toString(10), WIN_STATUS.PLAYER2.toString(10), "Player2 must win in this case");
         // PLAYER 2 TAKE THE AWARD
-        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[0];
-        const txObj = await rockPaperScissor.GameAward(gameID, {from : player2});
-        const newBalance = (await rockPaperScissor.getBalance.call(player2))[0];
+        const oldBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
+        const txObj = await rockPaperScissor.gameAward(gameID, {from : player2});
+        const newBalance = (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.GROSS];
         // DEFINING PENALITY
         assert((expirationTime < timestampP2));
         const weight = toBN(Math.floor((BET / (expirationTime - freeBetTime)) / PENALITY_RATIO));
@@ -435,11 +432,11 @@ contract("RockPaperScissor", accounts => {
 
         txObj.logs[1].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
-        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
 
         txObj.logs[2].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[2].args.who, player2, "Player Dismatch");
-        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
     });
 
     it("Game Stop - GameStatus: WaitingP2 (from p1)", async function() {
@@ -453,7 +450,7 @@ contract("RockPaperScissor", accounts => {
         const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
         await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2});
          // PLAYER 1 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
+        await rockPaperScissor.showHandP1(gameID, ENCRYPT_HAND_KEY.PLAYER1, {from : player1});
         wait(5000) //game expired
         const txObj = await rockPaperScissor.stopGame(gameID, {from : player1});
         
@@ -464,11 +461,11 @@ contract("RockPaperScissor", accounts => {
 
         txObj.logs[1].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[1].args.who, player1, "Player Dismatch");
-        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[1].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player1))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
 
         txObj.logs[2].event = "DepositLockedLog";
         assert.strictEqual(txObj.logs[2].args.who, player2, "Player Dismatch");
-        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[1].toString(10), "Amount Dismatch");
+        assert.strictEqual(txObj.logs[2].args.amount.toString(10), (await rockPaperScissor.getBalance.call(player2))[BALANCE_TYPE.LOCKED].toString(10), "Amount Dismatch");
     });
 
     it("Game Stop - GameStatus: WaitingP1 (from p2)", async function() {
@@ -482,7 +479,7 @@ contract("RockPaperScissor", accounts => {
         const secretHandP2 = await rockPaperScissor.encryptHand.call(HAND.PAPER, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
         await rockPaperScissor.challangeAccepted(gameID, secretHandP2, {from : player2});
          // PLAYER 2 - SHOW HAND
-        await rockPaperScissor.showHand(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
+        await rockPaperScissor.showHandP2(gameID, ENCRYPT_HAND_KEY.PLAYER2, {from : player2});
         wait(5000) //game expired
         const txObj = await rockPaperScissor.stopGame(gameID, {from : player2});
         
