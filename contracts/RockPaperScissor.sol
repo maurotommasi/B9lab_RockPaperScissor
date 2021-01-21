@@ -135,6 +135,7 @@ contract RockPaperScissor is Stoppable{
         GameMetaData memory game = games[_gameID];
         Balance memory balance = balances[msg.sender];
         uint balance_available = balance.balance.sub(balance.balance_locked);
+        
         require(_secretHand != bytes32(0), "RockPaperScissor.challangeAccepted, Secret Hand not valid");
         require(balance_available >= game.bet, "RockPaperScissor.challangeAccepted, Not enough wei on sender's balance to bet this game");
         require(game.gameStatus == GameStatus.Created, "RockPaperScissor.challangeAccepted, This game is not created yet or challange already accepted");
@@ -195,7 +196,6 @@ contract RockPaperScissor is Stoppable{
 
         require(game.gameStatus == GameStatus.Bet || game.gameStatus == GameStatus.WaitingP2, "Dismatch Status Game");
         require(game.player2 == msg.sender, "msg.sender is not a player");
-        require(game.gameStatus != GameStatus.Closed, "Game already closed");
 
         Hand player2Hand = game.handPlayer2;
         GameStatus newGameStatus;
