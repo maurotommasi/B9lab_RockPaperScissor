@@ -1,4 +1,5 @@
 const RockPaperScissor = artifacts.require("./RockPaperScissor.sol");
+const truffleAssert = require("truffle-assertions");
 
 contract("RockPaperScissor", accounts => {
     
